@@ -1,5 +1,6 @@
 from flask import Flask, request, Response
 from twilio.twiml.messaging_response import MessagingResponse
+import gspread
 
 app = Flask(__name__)
 
@@ -39,7 +40,7 @@ oferta_academica = {
     },
     "7": {
         "nombre": "🛠️ Técnico superior en Soporte de infraestructura de tecnología de la información",
-        "detalle": "🛠️ *Técnico Superior en Soporte de Infraestructura de TI*\nDuración: 3 años.\nEl Técnico Superior en Soporte e Infraestructura de Tecnología de la Información está capacitado para implementar, mantener, actualizar y administrar infraestructuras tecnológicas en organizaciones, garantizando la disponibilidad, seguridad y continuidad de los sistemas informáticos.",
+        "detalle": "🛠️ *Técnico Superior en Soporte e Infraestructura de TI*\nDuración: 3 años.\nEl Técnico Superior en Soporte e Infraestructura de Tecnología de la Información está capacitado para implementar, mantener, actualizar y administrar infraestructuras tecnológicas en organizaciones, garantizando la disponibilidad, seguridad y continuidad de los sistemas informáticos.",
         "link": "https://sites.google.com/superior50.com.ar/nivelterciario/oferta-acad%C3%A9mica/soporte-de-infraestructura-de-ti?authuser=0"
     },
     "8": {
@@ -50,14 +51,81 @@ oferta_academica = {
 }
 
 def obtener_lista_carreras():
-    """Genera y retorna el texto formateado con el listado completo de carreras."""
+    """Genera y retorna el texto con la lista de carreras disponibles para enviar por WhatsApp.
+
+    Recorre el diccionario `oferta_academica` y arma un menú con cada carrera numerada.
+    El usuario debe responder con el número de la carrera que quiere consultar.
+    """
+    # Inicializa el texto que se va a mostrar en WhatsApp.
     texto = "📋 *OFERTA ACADÉMICA - CARRERAS*:\n\n"
+
+    # Recorre todas las carreras guardadas en el diccionario.
     for clave, info in oferta_academica.items():
         texto += f"{clave}. {info['nombre']}\n"
+
+    # Agrega la instrucción final para que el usuario elija una opción.
     texto += "\nResponde con el número de la carrera que te interesa:"
     return texto
 
+def obtener_mesas_desde_sheets():
+    """Se conecta a Google Sheets y extrae los datos de mesas de examen para mostrarlos al usuario.
+
+    La función:
+    1) inicia la autenticación con la cuenta de servicio de Google,
+    2) abre la planilla de Google Sheets,
+    3) lee la hoja 'MesasExamen',
+    4) transforma los datos en un diccionario clave-valor,
+    5) arma un texto listo para enviar por WhatsApp.
+    """
+    try:
+        # Crea el cliente de Google Sheets usando el archivo de credenciales JSON.
+        gc = gspread.service_account(filename="credentials.json")
+
+        # Abre la planilla pública/correspondiente a la institución.
+        sh = gc.open("Bot_Datos_Terciario50")
+
+        # Accede a la hoja específica que contiene la información de mesas de examen.
+        worksheet = sh.worksheet("MesasExamen")
+
+        # Lee todas las filas de la hoja y las guarda como listas de texto.
+        filas = worksheet.get_all_values()
+
+        # Convierte la información en un diccionario donde la clave es la primera columna
+        # y el valor es la segunda columna, por ejemplo: {'Turno 1': '10/05'}.
+        # Solo incluye filas que tengan al menos 2 columnas.
+        datos = {fila[0]: fila[1] for fila in filas if len(fila) >= 2}
+
+        # Arma el texto final para responder por WhatsApp.
+        # Se usan los valores 'Turno 1', 'Turno 2', 'Turno 3' y 'EstadoMesa' en la hoja.
+        texto = (
+            "📝 *INSCRIPCIONES A LAS MESAS DE EXAMEN*:\n\n"
+            f"📌 *Turnos de Exámenes Finales*:\n"
+            f"• *1.er turno*: {datos.get('Turno 1', 'No disponible')}\n\n"
+            f"• *2.º turno*: {datos.get('Turno 2', 'No disponible')}\n\n"
+            f"• *3.er turno*: {datos.get('Turno 3', 'No disponible')}\n\n"
+            f"{datos.get('EstadoMesa', '')}\n\n"
+            "Las inscripciones se realizan a través de la página oficial:\n"
+            "https://sites.google.com/superior50.com.ar/nivelterciario/inicio \n\n"
+            "Envía cualquier mensaje para volver al menú principal."
+        )
+
+        # Devuelve el mensaje formateado para que el bot lo envíe al usuario.
+        return texto
+    except Exception as e:
+        # Si falla la conexión o la lectura de Google Sheets, se devuelve un mensaje alternativo.
+        return (
+            "⚠️ En este momento no podemos acceder a la información actualizada de mesas de examen. "
+            "Por favor, intenta más tarde o visita nuestra web oficial.\n\n"
+            "Envía cualquier mensaje para volver al menú principal."
+        )
+
 def mostrar_menu():
+    """Devuelve el texto del menú principal del bot.
+
+    Este menú se muestra al inicio y cada vez que el usuario vuelve al inicio.
+    Cada opción dirige a una sección diferente del asistente institucional.
+    """
+    # Retorna el contenido del menú principal en formato legible para WhatsApp.
     return (
         "\n 🏛️ *TERCIARIO SUPERIOR N° 50* 🏛️\n\n"
         "1. Oferta académica (carreras)\n"
@@ -72,19 +140,28 @@ def mostrar_menu():
 
 @app.route("/whatsapp", methods=['POST'])
 def whatsapp_reply():
-    # Identificamos al usuario por su número de teléfono único
+    """Procesa los mensajes entrantes de WhatsApp y dirige la conversación por etapas.
+
+    La lógica usa un diccionario `sesiones` para guardar el estado de cada contacto.
+    Así, cada usuario conserva su propio flujo de conversación y no se mezclan con otros.
+    """
+    # Obtenemos el número del usuario para identificarlo de forma única.
     from_numero = request.values.get('From', '')
+
+    # Tomamos el texto del mensaje y lo normalizamos para comparar de forma segura.
     mensaje_usuario = request.values.get('Body', '').lower().strip()
 
+    # Creamos la respuesta que Twilio va a devolver al usuario.
     respuesta_twilio = MessagingResponse()
     msg = respuesta_twilio.message()
 
-    # Si es la primera vez que este número nos escribe, le creamos su sesión en "inicio"
+    # Si es la primera vez que este número nos escribe, le creamos su sesión en "inicio".
     if from_numero not in sesiones:
         sesiones[from_numero] = {"paso": "inicio"}
 
-    # Obtenemos el paso actual correspondiente EXCLUSIVAMENTE a este usuario
+    # Obtenemos el paso actual correspondiente EXCLUSIVAMENTE a este usuario.
     paso_actual = sesiones[from_numero]["paso"]
+
     # -----------------------------------------------------------------
     # FASE 1: BIENVENIDA Y MENÚ DIRECTO
     # -----------------------------------------------------------------
@@ -106,7 +183,7 @@ def whatsapp_reply():
             sesiones[from_numero]["paso"] = "viendo_carreras"
 
         elif mensaje_usuario == "2":
-            # NUEVA SECCIÓN: REQUISITOS DE INSCRIPCIÓN PARA INGRESANTES
+            # SECCIÓN: REQUISITOS DE INSCRIPCIÓN PARA INGRESANTES
             msg.body(
                 "📝 *INSCRIPCIÓN Y REQUISITOS (INGRESANTES)*:\n\n"
                 "Para anotarte como alumno regular a cualquier carrera, necesitas presentar la siguiente documentación:\n\n"
@@ -122,23 +199,10 @@ def whatsapp_reply():
             sesiones[from_numero]["paso"] = "volver_menu"   
         
         elif mensaje_usuario == "3":
-            # SECCIÓN 1: INSCRIPCIONES Y MESAS DE EXAMEN
-            msg.body(
-                "📝 *INSCRIPCIONES A LAS MESAS DE EXAMEN*:\n\n"
-                "📌 *Turnos de Exámenes Finales*:\n"
-                "• *1.er turno (9 al 13 de febrero)*: Fechas de inscripción y mesas para materias previas/libres.\n"
-                "- Exámenes finales del primer turno: del 18 de febrero al 18 de marzo (2 llamados).\n\n"
-
-                "• *2.º turno (16 al 26 de junio)*: Inscripción y mesas del turno de invierno.\n"
-                "- Exámenes finales del segundo turno: del 20 al 31 de julio (1 llamado).\n\n"
-
-                "• *3.er turno (2 al 13 de noviembre)*: Inscripción y mesas del turno de fin de año.\n"
-                "- Exámenes finales del tercer turno: del 23 de noviembre al 23 de diciembre (2 llamados).\n\n"
-                "⚠️ *Importante*: Las fechas exactas de inscripción se habilitan en la plataforma según el calendario oficial.\n"
-                "Las inscripciones se realizan a través de la página oficial:\n"
-                "https://sites.google.com/superior50.com.ar/nivelterciario/inicio \n\n"
-                "Envía cualquier mensaje para volver al menú principal."
-            )
+            # Cuando el usuario elige la opción 3 del menú, se ejecuta esta función.
+            # La función lee la hoja de Google Sheets y devuelve un texto con la información
+            # actualizada de mesas de examen para enviárselo al usuario por WhatsApp.
+            msg.body(obtener_mesas_desde_sheets())
             sesiones[from_numero]["paso"] = "volver_menu"
             
         elif mensaje_usuario == "4":
@@ -201,7 +265,7 @@ def whatsapp_reply():
             sesiones[from_numero]["paso"] = "volver_menu"
 
         elif mensaje_usuario == "8":
-            # NUEVA SECCIÓN: GLOSARIO Y TÉRMINOS ACADÉMICOS
+            # SECCIÓN: GLOSARIO Y TÉRMINOS ACADÉMICOS
             msg.body(
                 "📖 *GLOSARIO Y PREGUNTAS FRECUENTES*:\n\n"
                 "• *Materias correlativas*: Materias que, según el plan de estudios, requieren haber cursado o aprobado otras previamente para poder inscribirte.\n\n"
@@ -232,7 +296,6 @@ def whatsapp_reply():
                 "1️⃣ Volver al menú principal\n"
                 "2️⃣ Ver otra carrera"
             )   
-            # Pasamos a un estado de decisión posterior
             sesiones[from_numero]["paso"] = "decidiendo_post_carrera"
         else:
             msg.body("❌ Opción no válida. Por favor, elige un número de carrera del 1 al 8.")
@@ -248,7 +311,6 @@ def whatsapp_reply():
             sesiones[from_numero]["paso"] = "menu_principal"
             
         elif mensaje_usuario == "2":
-            # ¡Y la reutilizamos también acá para ver otra carrera!
             msg.body(obtener_lista_carreras())
             sesiones[from_numero]["paso"] = "viendo_carreras"
             
@@ -260,6 +322,7 @@ def whatsapp_reply():
             )
             
         return Response(str(respuesta_twilio), mimetype='text/xml')
+
     # -----------------------------------------------------------------
     # AUXILIAR: VOLVER AL MENÚ
     # -----------------------------------------------------------------
