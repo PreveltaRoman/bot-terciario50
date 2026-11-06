@@ -51,117 +51,81 @@ oferta_academica = {
 }
 
 def obtener_lista_carreras():
-    """Genera y retorna el texto con la lista de carreras disponibles para enviar por WhatsApp.
-
-    Recorre el diccionario `oferta_academica` y arma un menú con cada carrera numerada.
-    El usuario debe responder con el número de la carrera que quiere consultar.
-    """
-    # Inicializa el texto que se va a mostrar en WhatsApp.
+    """Genera y retorna el texto formateado con el listado completo de carreras."""
     texto = "📋 *OFERTA ACADÉMICA - CARRERAS*:\n\n"
-
-    # Recorre todas las carreras guardadas en el diccionario.
     for clave, info in oferta_academica.items():
         texto += f"{clave}. {info['nombre']}\n"
-
-    # Agrega la instrucción final para que el usuario elija una opción.
-    texto += "\nResponde con el número de la carrera que te interesa:"
+    texto += "\n👉 *Escribe ÚNICAMENTE el NÚMERO (del 1 al 8) de la carrera que te interesa:*"
     return texto
 
 def obtener_mesas_desde_sheets():
-    """Se conecta a Google Sheets y extrae los datos de mesas de examen para mostrarlos al usuario.
-
-    La función:
-    1) inicia la autenticación con la cuenta de servicio de Google,
-    2) abre la planilla de Google Sheets,
-    3) lee la hoja 'MesasExamen',
-    4) transforma los datos en un diccionario clave-valor,
-    5) arma un texto listo para enviar por WhatsApp.
-    """
+    """Se conecta a Google Sheets y extrae los datos de mesas de examen, inscripciones y mesas especiales."""
     try:
-        # Crea el cliente de Google Sheets usando el archivo de credenciales JSON.
         gc = gspread.service_account(filename="credentials.json")
-
-        # Abre la planilla pública/correspondiente a la institución.
         sh = gc.open("Bot_Datos_Terciario50")
-
-        # Accede a la hoja específica que contiene la información de mesas de examen.
         worksheet = sh.worksheet("MesasExamen")
-
-        # Lee todas las filas de la hoja y las guarda como listas de texto.
         filas = worksheet.get_all_values()
-
-        # Convierte la información en un diccionario donde la clave es la primera columna
-        # y el valor es la segunda columna, por ejemplo: {'Turno 1': '10/05'}.
-        # Solo incluye filas que tengan al menos 2 columnas.
+        
         datos = {fila[0]: fila[1] for fila in filas if len(fila) >= 2}
-
-        # Arma el texto final para responder por WhatsApp.
-        # Se usan los valores 'Turno 1', 'Turno 2', 'Turno 3' y 'EstadoMesa' en la hoja.
+        
         texto = (
-            "📝 *INSCRIPCIONES A LAS MESAS DE EXAMEN*:\n\n"
+            "📝 *INSCRIPCIONES Y MESAS DE EXAMEN*:\n\n"
+            f"🗓️ *Fechas de Inscripción Generales*:\n"
+            f"• {datos.get('InscripciónIngresantes', 'Consultar en plataforma oficial.')}\n\n"
             f"📌 *Turnos de Exámenes Finales*:\n"
-            f"• *1 - Turno*: {datos.get('Turno 1', 'No disponible')}\n\n"
-            f"• *2 - Turno*: {datos.get('Turno 2', 'No disponible')}\n\n"
-            f"• *3 - Turno*: {datos.get('Turno 3', 'No disponible')}\n\n"
+            f"• *1.er turno*: {datos.get('Turno 1', 'No disponible')}\n\n"
+            f"• *2.º turno*: {datos.get('Turno 2', 'No disponible')}\n\n"
+            f"• *3.er turno*: {datos.get('Turno 3', 'No disponible')}\n\n"
             f"🎓 *Mesas Especiales (Materias Pendientes)*:\n"
-            f"• Inscripción y mesas: {datos.get('Mesas Especiales', 'No disponible')}\n\n"
+            f"• {datos.get('Mesas Especiales', 'No disponible')}\n\n"
             f"{datos.get('EstadoMesa', '')}\n\n"
-            "Las inscripciones se realizan a través de la página oficial:\n"
+            "🔗 Las inscripciones se realizan a través de la página oficial:\n"
             "https://sites.google.com/superior50.com.ar/nivelterciario/inicio \n\n"
-            "Envía cualquier mensaje para volver al menú principal."
+            + mensaje_volver_menu()
         )
-
-        # Devuelve el mensaje formateado para que el bot lo envíe al usuario.
         return texto
     except Exception as e:
-        # Si falla la conexión o la lectura de Google Sheets, se devuelve un mensaje alternativo.
         return (
             "⚠️ En este momento no podemos acceder a la información actualizada de mesas de examen. "
             "Por favor, intenta más tarde o visita nuestra web oficial.\n\n"
-            "Envía cualquier mensaje para volver al menú principal."
+            + mensaje_volver_menu()
         )
 
 def mostrar_menu():
-    """Devuelve el texto del menú principal del bot.
-
-    Este menú se muestra al inicio y cada vez que el usuario vuelve al inicio.
-    Cada opción dirige a una sección diferente del asistente institucional.
-    """
-    # Retorna el contenido del menú principal en formato legible para WhatsApp.
     return (
-        "\n 🏛️ *TERCIARIO SUPERIOR N° 50* 🏛️\n\n"
+        "\n 🏛️ *Opciones y trámites disponibles* 🏛️\n\n"
         "1. Oferta académica (carreras)\n"
         "2. Inscripción y requisitos (ingresantes)\n"
-        "3. Sobre las mesas de examen\n"
+        "3. Sobre las inscripciones y mesas de exámenes\n"
         "4. Calendario académico y eventos del año\n"
         "5. Guía del estudiante y enlaces\n"
         "6. Contacto, dirección y teléfono\n"
         "7. Sitio web oficial (más información)\n"
-        "8. Glosario y términos académicos (FAQ)\n"
+        "8. Glosario y términos académicos (FAQ)\n\n"
+        "👇 *Escribe el NÚMERO de la opción deseada (ejemplo: 1):*"
     )
+
+
+def mensaje_volver_menu():
+    return "----------------------------------\n👉 *Escribe 1 para volver al menú principal.*"
+
+
+def mensaje_opcion_invalida(detalle=""):
+    if detalle:
+        return f"❌ Opción no válida.\n\n{detalle}"
+    return "❌ Opción no válida.\n\n" + mensaje_volver_menu()
 
 @app.route("/whatsapp", methods=['POST'])
 def whatsapp_reply():
-    """Procesa los mensajes entrantes de WhatsApp y dirige la conversación por etapas.
-
-    La lógica usa un diccionario `sesiones` para guardar el estado de cada contacto.
-    Así, cada usuario conserva su propio flujo de conversación y no se mezclan con otros.
-    """
-    # Obtenemos el número del usuario para identificarlo de forma única.
     from_numero = request.values.get('From', '')
-
-    # Tomamos el texto del mensaje y lo normalizamos para comparar de forma segura.
     mensaje_usuario = request.values.get('Body', '').lower().strip()
 
-    # Creamos la respuesta que Twilio va a devolver al usuario.
     respuesta_twilio = MessagingResponse()
     msg = respuesta_twilio.message()
 
-    # Si es la primera vez que este número nos escribe, le creamos su sesión en "inicio".
     if from_numero not in sesiones:
         sesiones[from_numero] = {"paso": "inicio"}
 
-    # Obtenemos el paso actual correspondiente EXCLUSIVAMENTE a este usuario.
     paso_actual = sesiones[from_numero]["paso"]
 
     # -----------------------------------------------------------------
@@ -169,8 +133,7 @@ def whatsapp_reply():
     # -----------------------------------------------------------------
     if paso_actual == "inicio":
         msg.body(
-            "¡Hola! Bienvenido/a al asistente virtual automático del Colegio Superior N°50 - GENERAL DON JOSÉ DE SAN MARTÍN.\n\n"
-            "Escribe el número de la opción que te interesa:\n"
+            "¡Hola! Bienvenido/a al asistente virtual del Colegio Superior N°50 - GENERAL DON JOSÉ DE SAN MARTÍN.\n"
             f"{mostrar_menu()}"
         )
         sesiones[from_numero]["paso"] = "menu_principal"
@@ -185,30 +148,25 @@ def whatsapp_reply():
             sesiones[from_numero]["paso"] = "viendo_carreras"
 
         elif mensaje_usuario == "2":
-            # SECCIÓN: REQUISITOS DE INSCRIPCIÓN PARA INGRESANTES
             msg.body(
                 "📝 *INSCRIPCIÓN Y REQUISITOS (INGRESANTES)*:\n\n"
                 "Para anotarte como alumno regular a cualquier carrera, necesitas presentar la siguiente documentación:\n\n"
                 "• 📄 *Título secundario* (o constancia de título en trámite / certificado de alumno regular si estás cursando el último año).\n"
                 "• 🪪 *Fotocopia de DNI* (anverso y reverso).\n"
-                "• *Partida de nacimiento* actualizada.\n"
-                "• *Fotos carnet* (actuales).\n"
-                "• *Ficha médica* / certificado de salud.\n\n"
+                "• 📜 *Partida de nacimiento* actualizada.\n"
+                "• 🖼️ *Fotos carnet* (actuales).\n"
+                "• 🩺 *Ficha médica* / certificado de salud.\n\n"
                 "🔗 La preinscripción online y los formularios correspondientes se habilitan en fechas específicas a través de nuestro sitio web:\n"
                 "https://sites.google.com/superior50.com.ar/nivelterciario/inicio\n\n"
-                "Envía cualquier mensaje para volver al menú principal."
+                + mensaje_volver_menu()
             )
             sesiones[from_numero]["paso"] = "volver_menu"   
         
         elif mensaje_usuario == "3":
-            # Cuando el usuario elige la opción 3 del menú, se ejecuta esta función.
-            # La función lee la hoja de Google Sheets y devuelve un texto con la información
-            # actualizada de mesas de examen para enviárselo al usuario por WhatsApp.
             msg.body(obtener_mesas_desde_sheets())
             sesiones[from_numero]["paso"] = "volver_menu"
             
         elif mensaje_usuario == "4":
-            # SECCIÓN 2: CALENDARIO ACADÉMICO Y EVENTOS ANUALES
             msg.body(
                 "📅 *CALENDARIO ACADÉMICO Y EVENTOS*:\n\n"
                 "• 🟢 *Curso introductorio (obligatorio)*: Inicio de actividades para ingresantes.\n"
@@ -229,64 +187,68 @@ def whatsapp_reply():
                 "• 🏁 *Cierre del 2.º cuatrimestre*: Finalización de clases del año.\n"
                 "- Fecha: 13 de noviembre.\n\n"
 
-                "• 📝 *Inscripción de estudiantes ingresantes a primer año 2027*: Primera convocatoria.\n"
+                "• 📝 *Inscripción de estudiantes ingresantes a primer año*: Primera convocatoria.\n"
                 "- Fecha: del 23 de noviembre al 14 de diciembre.\n\n"
 
                 "• 🎓 *Finalización del ciclo lectivo*.\n"
                 "- Fecha: 11 de diciembre.\n\n"
-                "Envía cualquier mensaje para volver al menú principal."
+
+                + mensaje_volver_menu()
             )
-            sesiones[from_numero]["paso"] = "volver_menu"
-            
+            sesiones[from_numero]["paso"] = "volver_menu"            
         elif mensaje_usuario == "5":
             msg.body(
-                "🔗 *Guía del Estudiante*:\n\n"
+                "🔗 *GUÍA DEL ESTUDIANTE Y ENLACES*:\n\n"
                 "Puedes acceder a la guía oficial de estudiantes aquí:\n"
                 "https://guiadelestudiante.superior50.com.ar/home \n\n"
-                "Envía cualquier mensaje para volver al menú principal."
+                + mensaje_volver_menu()
             )
             sesiones[from_numero]["paso"] = "volver_menu"
             
         elif mensaje_usuario == "6":
             msg.body(
-                "📍 *Contacto y Dirección*:\n\n"
-                "• Dirección: Domingo Ferrari 480 - Rufino, Santa Fe.\n"
-                "• Teléfono: (03382) 428570\n"
-                "• Email: nivel_terciario@superior50.com.ar\n\n"
-                "Envía cualquier mensaje para volver al menú principal."
+                "📍 *CONTACTO Y DIRECCIÓN*:\n\n"
+                "• 🏢 *Dirección*: Domingo Ferrari 480 - Rufino, Santa Fe.\n"
+                "• 📞 *Teléfono*: (03382) 428570\n"
+                "• ✉️ *Email*: nivel_terciario@superior50.com.ar\n\n"
+                + mensaje_volver_menu()
             )
             sesiones[from_numero]["paso"] = "volver_menu"
             
         elif mensaje_usuario == "7":
             msg.body(
-                "🌐 *Sitio Web Oficial*:\n\n"
+                "🌐 *SITIO WEB OFICIAL*:\n\n"
                 "Visítanos en:\n"
                 "https://sites.google.com/superior50.com.ar/nivelterciario/inicio \n\n"
-                "Envía cualquier mensaje para volver al menú principal."
+                + mensaje_volver_menu()
             )
             sesiones[from_numero]["paso"] = "volver_menu"
 
         elif mensaje_usuario == "8":
-            # SECCIÓN: GLOSARIO Y TÉRMINOS ACADÉMICOS
+            # SECCIÓN ENRIQUECIDA: GLOSARIO Y FAQ COMPLETO
             msg.body(
-                "📖 *GLOSARIO Y PREGUNTAS FRECUENTES*:\n\n"
-                "• *Materias correlativas*: Materias que, según el plan de estudios, requieren haber cursado o aprobado otras previamente para poder inscribirte.\n\n"
-
-                "• *Materias cuatrimestrales y anuales*: Las cuatrimestrales se cursan durante un cuatrimestre, mientras que las anuales se extienden a lo largo de todo el ciclo lectivo.\n\n"
-
-                "• *Homologaciones y equivalencias*: Trámite para solicitar el reconocimiento de materias aprobadas previamente en otra institución o carrera de nivel superior.\n\n"
-
-                "• *Alumno regular*: Condición del estudiante que cumple con el porcentaje de asistencia y con la aprobación de los trabajos prácticos y parciales requeridos.\n\n"
-                "Envía cualquier mensaje para volver al menú principal."
+                "📖 *GLOSARIO Y PREGUNTAS FRECUENTES (FAQ)*:\n\n"
+                "• 🏆 *Promoción directa*: Permite aprobar sin final. Requisitos: 75% de asistencia (o 50% justificado), 100% de TPs y promedio de 8 o más en parciales.\n\n"
+                "• 🗣️ *Coloquio*: Instancia de evaluación oral integradora previa a la mesa final para alumnos regulares o promocionados.\n\n"
+                "• 📜 *Alumno Regular*: Se mantiene con el 75% de asistencia (o hasta 50% por salud/trabajo) y aprobación de parciales y TPs.\n\n"
+                "• 👥 *Cursado Semi-presencial*: Requiere cumplir al menos con el 40% de asistencia presencial.\n\n"
+                "• 🔓 *Condición Libre*: Rinde todo el programa en mesa final sin cursada. Válido solo para formato *materia*.\n\n"
+                "• 🔄 *Homologaciones y Equivalencias*: Trámite para acreditar materias de otra institución.\n"
+                "🔗 Info: https://sites.google.com/superior50.com.ar/nivelterciario/informaci%C3%B3n?authuser=0 \n\n"
+                "• 🎓 *Mesas Especiales*: Llamados para alumnos con 1 o 2 materias pendientes para recibirse.\n\n"
+                "• 🔗 *Materias Correlativas*: Asignaturas que exigen tener cursadas/aprobadas otras previas.\n\n"
+                "🌐 *Régimen de cursado completo*:\n"
+                "https://sites.google.com/superior50.com.ar/nivelterciario/estudiantes/sistema-de-calificaci%C3%B3n?authuser=0 \n\n"
+                + mensaje_volver_menu()
             )
             sesiones[from_numero]["paso"] = "volver_menu"
         else:
-            msg.body(f"❌ Opción no válida.\n\n{mostrar_menu()}")
+            msg.body(mensaje_opcion_invalida(mostrar_menu()))
             
         return Response(str(respuesta_twilio), mimetype='text/xml')
 
     # -----------------------------------------------------------------
-    # FASE 3: VIENDO CARRERAS (Detalle + Link web)
+    # FASE 3: VIENDO CARRERAS
     # -----------------------------------------------------------------
     if paso_actual == "viendo_carreras":
         if mensaje_usuario in oferta_academica:
@@ -295,17 +257,17 @@ def whatsapp_reply():
                 f"{carrera['detalle']}\n\n"
                 f"🔗 *Plan de estudios y más info:* {carrera['link']}\n\n"
                 "----------------------------------\n"
-                "1️⃣ Volver al menú principal\n"
-                "2️⃣ Ver otra carrera"
+                "1️⃣ Escribe *1* para volver al menú principal\n"
+                "2️⃣ Escribe *2* para ver otra carrera"
             )   
             sesiones[from_numero]["paso"] = "decidiendo_post_carrera"
         else:
-            msg.body("❌ Opción no válida. Por favor, elige un número de carrera del 1 al 8.")
+            msg.body(mensaje_opcion_invalida("👉 *Por favor, escribe un NÚMERO del 1 al 8 para elegir una carrera:*"))
 
         return Response(str(respuesta_twilio), mimetype='text/xml')
 
-   # -----------------------------------------------------------------
-    # FASE 4: DECISIÓN POST-CARRERA (Menú principal vs Seguir viendo)
+    # -----------------------------------------------------------------
+    # FASE 4: DECISIÓN POST-CARRERA
     # -----------------------------------------------------------------
     if paso_actual == "decidiendo_post_carrera":
         if mensaje_usuario == "1":
@@ -317,20 +279,23 @@ def whatsapp_reply():
             sesiones[from_numero]["paso"] = "viendo_carreras"
             
         else:
-            msg.body(
-                "❌ Opción no válida. Por favor, responde:\n"
+            msg.body(mensaje_opcion_invalida(
+                "👉 *Responde con un número:*\n"
                 "1️⃣ Para volver al menú principal\n"
                 "2️⃣ Para ver otra carrera"
-            )
+            ))
             
         return Response(str(respuesta_twilio), mimetype='text/xml')
 
     # -----------------------------------------------------------------
-    # AUXILIAR: VOLVER AL MENÚ
+    # AUXILIAR: VOLVER AL MENÚ (Exige 1 de forma explícita)
     # -----------------------------------------------------------------
     if paso_actual == "volver_menu":
-        msg.body(mostrar_menu())
-        sesiones[from_numero]["paso"] = "menu_principal"
+        if mensaje_usuario == "1":
+            msg.body(mostrar_menu())
+            sesiones[from_numero]["paso"] = "menu_principal"
+        else:
+            msg.body(mensaje_opcion_invalida(mensaje_volver_menu()))
         return Response(str(respuesta_twilio), mimetype='text/xml')
 
     return Response(str(respuesta_twilio), mimetype='text/xml')
